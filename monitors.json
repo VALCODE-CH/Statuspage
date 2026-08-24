@@ -1,0 +1,37 @@
+{
+  "$comment": [
+    "Central configuration for every monitored endpoint.",
+    "",
+    "Add a monitor: create the component in Statuspage, look up its id with",
+    "  STATUSPAGE_API_KEY=... python3 monitor.py --list-components",
+    "and append an object to \"monitors\" with name, url and component_id.",
+    "No code and no workflow change is needed - component ids are public",
+    "information (they appear on the status page itself).",
+    "",
+    "Values written as ${NAME} are read from environment variables at runtime;",
+    "use them for anything secret and map them from GitHub Secrets in",
+    ".github/workflows/monitor.yml. Every key inside \"defaults\" can be",
+    "overridden per monitor."
+  ],
+
+  "defaults": {
+    "method": "GET",
+    "timeout_seconds": 10,
+    "expected_status": [200],
+    "failure_threshold": 3,
+    "success_threshold": 2,
+    "retry_delay_seconds": 15,
+    "up_status": "operational",
+    "down_status": "major_outage",
+    "flapping_status": null,
+    "page_id": "${STATUSPAGE_PAGE_ID}"
+  },
+
+  "monitors": [
+    {
+      "name": "CoreFit API",
+      "url": "https://api.core-fit.app/up",
+      "component_id": "${STATUSPAGE_COMPONENT_ID_COREFIT_API}"
+    }
+  ]
+}

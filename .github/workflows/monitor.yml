@@ -1,0 +1,52 @@
+name: API Monitor
+
+on:
+  schedule:
+    # Every 5 minutes (GitHub's shortest allowed interval). Scheduled runs are
+    # best effort and can be delayed when Actions is under load.
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Run the health checks but do not touch Statuspage"
+        type: boolean
+        default: false
+      only:
+        description: "Comma separated monitor names to run (empty = all)"
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+# Never let two monitoring runs update the same component at the same time.
+concurrency:
+  group: api-monitor
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Health check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Check endpoints and update Statuspage
+        env:
+          # --- Statuspage credentials (GitHub Secrets, never hard coded) ---
+          STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
+          STATUSPAGE_PAGE_ID: ${{ secrets.STATUSPAGE_PAGE_ID }}
+          STATUSPAGE_COMPONENT_ID: ${{ secrets.STATUSPAGE_COMPONENT_ID }}
+          #
+          # --- Add one line per additional component or per protected endpoint ---
+          # Referenced from monitors.json as "${STATUSPAGE_COMPONENT_ID_BILLING}".
+          # STATUSPAGE_COMPONENT_ID_BILLING: ${{ secrets.STATUSPAGE_COMPONENT_ID_BILLING }}
+          # HEALTHCHECK_TOKEN: ${{ secrets.HEALTHCHECK_TOKEN }}
+          #
+          # Set to "true" to make the workflow run red while a monitor is DOWN.
+          FAIL_JOB_ON_DOWN: "false"
+          DRY_RUN: ${{ inputs.dry_run && 'true' || 'false' }}
+          MONITOR_ONLY: ${{ inputs.only }}
+        run: python3 monitor.py --config monitors.json
