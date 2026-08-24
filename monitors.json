@@ -31,7 +31,7 @@
     {
       "name": "CoreFit API",
       "url": "https://api.core-fit.app/up",
-      "component_id": "${STATUSPAGE_COMPONENT_ID}"
+      "component_id": "${STATUSPAGE_COMPONENT_ID_COREFIT_API}"
     }
   ]
 }
