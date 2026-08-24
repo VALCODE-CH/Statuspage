@@ -38,11 +38,18 @@ jobs:
           # --- Statuspage credentials (GitHub Secrets, never hard coded) ---
           STATUSPAGE_API_KEY: ${{ secrets.STATUSPAGE_API_KEY }}
           STATUSPAGE_PAGE_ID: ${{ secrets.STATUSPAGE_PAGE_ID }}
-          STATUSPAGE_COMPONENT_ID: ${{ secrets.STATUSPAGE_COMPONENT_ID }}
           #
-          # --- Add one line per additional component or per protected endpoint ---
-          # Referenced from monitors.json as "${STATUSPAGE_COMPONENT_ID_BILLING}".
+          # --- Component ids ---
+          # A GitHub Secret is only visible to the script once it is mapped here.
+          # Every ${NAME} used in monitors.json needs a matching line in this block.
+          # Simpler alternative: component ids are not secret (they are published on
+          # the status page), so the id can also be written straight into
+          # monitors.json - then no secret and no line here are needed at all.
+          STATUSPAGE_COMPONENT_ID: ${{ secrets.STATUSPAGE_COMPONENT_ID }}
+          STATUSPAGE_COMPONENT_ID_COREFIT_API: ${{ secrets.STATUSPAGE_COMPONENT_ID_COREFIT_API }}
           # STATUSPAGE_COMPONENT_ID_BILLING: ${{ secrets.STATUSPAGE_COMPONENT_ID_BILLING }}
+          #
+          # --- Tokens for protected health endpoints ---
           # HEALTHCHECK_TOKEN: ${{ secrets.HEALTHCHECK_TOKEN }}
           #
           # Set to "true" to make the workflow run red while a monitor is DOWN.
