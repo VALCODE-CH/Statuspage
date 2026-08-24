@@ -128,10 +128,15 @@ def resolve(value, where: str, required: bool = True):
 
     resolved = PLACEHOLDER_RE.sub(substitute, value)
     if missing and required:
-        raise ConfigError(
-            f"{where}: environment variable(s) {', '.join(sorted(set(missing)))} are not set. "
-            "Add them as GitHub Secrets and map them in .github/workflows/monitor.yml."
-        )
+        names = sorted(set(missing))
+        lines = [f"{where}: environment variable(s) {', '.join(names)} are not set.",
+                 "  A GitHub Secret only reaches this script once it is mapped in the",
+                 "  workflow. Add to the env: block of .github/workflows/monitor.yml:"]
+        for name in names:
+            lines.append("      " + name + ": ${{ secrets." + name + " }}")
+        lines.append("  Component ids are not secret (they are published on the status page),")
+        lines.append("  so you can also write the id directly into monitors.json instead.")
+        raise ConfigError("\n".join(lines))
     return resolved
 
 

@@ -419,6 +419,23 @@ Umgebungswerte durch `***` ersetzt (zusätzlich zur Maskierung durch GitHub selb
 
 ---
 
+## Fehlersuche
+
+| Meldung im Actions-Log | Ursache | Lösung |
+| --- | --- | --- |
+| `environment variable(s) X are not set` | Das Secret existiert vielleicht, ist aber **nicht im Workflow gemappt**. GitHub stellt Secrets nicht automatisch als Umgebungsvariablen bereit. | Die Zeile aus der Fehlermeldung in den `env:`-Block von `.github/workflows/monitor.yml` kopieren – oder die Component-ID direkt in `monitors.json` schreiben (sie ist nicht geheim). |
+| `STATUSPAGE_API_KEY is not set` | Secret fehlt oder ist anders geschrieben. | Secret exakt als `STATUSPAGE_API_KEY` anlegen. |
+| `HTTP 401` von Statuspage | API-Key ungültig oder ohne Rechte an dieser Page. | Key neu erzeugen; Benutzer muss die Page bearbeiten dürfen. |
+| `HTTP 404` von Statuspage | Falsche `page_id` oder `component_id`. | `python3 monitor.py --list-components` gibt beide korrekt aus. |
+| `result: DOWN`, obwohl der Dienst läuft | Der Endpoint antwortet mit einem Statuscode, der nicht in `expected_status` steht, oder braucht länger als `timeout_seconds`. | Log zeigt den tatsächlichen Code und die Antwortzeit – `expected_status` bzw. `timeout_seconds` anpassen. |
+| Workflow läuft gar nicht | `schedule` greift nur auf dem Default-Branch. | Änderungen nach `main` mergen. |
+
+Merksatz: **Ein Secret anlegen genügt nicht.** Jeder `${NAME}`-Platzhalter in
+`monitors.json` braucht eine passende Zeile im `env:`-Block des Workflows. Wer
+sich das sparen will, schreibt Component-IDs im Klartext in `monitors.json`.
+
+---
+
 ## Hinweise zu GitHub Actions Limits
 
 * **Kürzestes Intervall: 5 Minuten.** Kürzere `cron`-Angaben werden von GitHub
