@@ -128,6 +128,8 @@ Als Secret `STATUSPAGE_PAGE_ID` speichern.
        | python3 -c 'import json,sys; [print(c["id"], "-", c["name"]) for c in json.load(sys.stdin)]'
      ```
      Ausgabe z. B. `9k2f4b7c1d3e - CoreFit API`.
+   * **Mit dem mitgelieferten Helfer:** `STATUSPAGE_API_KEY=... python3 monitor.py --list-components`
+     listet alle Pages samt Component-IDs.
    * **Aus der Admin-URL:** Component öffnen; die URL enthält
      `.../components/<COMPONENT_ID>`.
    * **Öffentlich:** `https://<deine-statuspage-domain>/api/v2/components.json`
@@ -232,19 +234,26 @@ Zusätzliche Umgebungsvariablen im Workflow:
 
 ## Weitere Endpoints hinzufügen
 
-Pro zusätzlichem Endpoint sind es zwei Schritte – Code muss nie angefasst werden.
+Ein Monitor = ein Statuspage-Component. Beliebig viele davon, **ein einziger
+Eintrag pro Endpoint** – Code und Workflow müssen nie angefasst werden.
 
-**Schritt 1:** Component in Statuspage anlegen, ID ermitteln (siehe oben) und als
-neues Secret hinterlegen, z. B. `STATUSPAGE_COMPONENT_ID_BILLING`.
+**Schritt 1:** Component in Statuspage anlegen (**Components → Add a component**).
 
-**Schritt 2:** Secret in `.github/workflows/monitor.yml` im `env:`-Block durchreichen
-(dort stehen bereits auskommentierte Beispielzeilen):
+**Schritt 2:** Component-ID nachschlagen:
 
-```yaml
-          STATUSPAGE_COMPONENT_ID_BILLING: ${{ secrets.STATUSPAGE_COMPONENT_ID_BILLING }}
+```bash
+export STATUSPAGE_API_KEY=...
+python3 monitor.py --list-components
 ```
 
-**Schritt 3:** Monitor in `monitors.json` ergänzen:
+```
+page_id      t7lm3xn8kz9q   CoreFit Status
+  component  9k2f4b7c1d3e   CoreFit API   [operational]
+  component  aa11bb22cc33   Billing API   [major_outage]
+  group      gg99hh88ii77   Backend       [operational]
+```
+
+**Schritt 3:** Monitor in `monitors.json` ergänzen – die ID direkt eintragen:
 
 ```json
 {
@@ -257,38 +266,68 @@ neues Secret hinterlegen, z. B. `STATUSPAGE_COMPONENT_ID_BILLING`.
     {
       "name": "Billing API",
       "url": "https://billing.core-fit.app/health",
-      "component_id": "${STATUSPAGE_COMPONENT_ID_BILLING}",
+      "component_id": "aa11bb22cc33",
       "timeout_seconds": 5,
       "expected_status": [200, 204]
     },
     {
-      "name": "Admin API (geschützt)",
-      "url": "https://admin.core-fit.app/health",
-      "component_id": "${STATUSPAGE_COMPONENT_ID_ADMIN}",
-      "headers": { "Authorization": "Bearer ${HEALTHCHECK_TOKEN}" },
-      "expected_body_contains": "\"status\":\"ok\"",
-      "failure_threshold": 2,
-      "down_status": "partial_outage",
-      "flapping_status": "degraded_performance"
-    },
-    {
-      "name": "Marketing-Site (pausiert)",
+      "name": "Marketing-Site",
       "url": "https://core-fit.app/",
-      "component_id": "${STATUSPAGE_COMPONENT_ID_WEB}",
-      "enabled": false
+      "component_id": "d4e5f6a7b8c9",
+      "method": "HEAD",
+      "down_status": "partial_outage"
     }
   ]
 }
 ```
 
-Die Monitore laufen nacheinander im selben Job. Requests an Statuspage werden auf
-ca. 1 Request/Sekunde gedrosselt, weil Atlassian den API-Zugriff in dieser
-Grössenordnung begrenzt. Bei sehr vielen Endpoints (Faustregel: > ~20) lieber die
-Timeouts/Retry-Pausen senken oder auf zwei Workflows mit `MONITOR_ONLY` aufteilen,
-damit ein Lauf deutlich unter 5 Minuten bleibt.
+Committen, fertig. Der nächste geplante Lauf prüft alle Monitore und aktualisiert
+jeden Component einzeln.
 
-Eine zweite Statuspage lässt sich ebenso einbinden: `page_id` pro Monitor setzen,
-z. B. `"page_id": "${STATUSPAGE_PAGE_ID_INTERNAL}"`.
+> **Warum steht beim ersten Monitor ein Platzhalter?**
+> Nur aus Gewohnheit der Erstkonfiguration – `${STATUSPAGE_COMPONENT_ID}` liest die
+> ID aus dem gleichnamigen GitHub Secret. Component-IDs sind **keine Geheimnisse**
+> (sie stehen auf der öffentlichen Statuspage unter `/api/v2/components.json`),
+> deshalb dürfen alle weiteren IDs unverschlüsselt in `monitors.json` stehen.
+> Wer lieber alles über Secrets führt, legt pro Component ein Secret an und reicht
+> es im `env:`-Block von `.github/workflows/monitor.yml` durch – dort stehen
+> auskommentierte Beispielzeilen.
+
+### Geschützte Health-Endpoints
+
+Braucht ein Endpoint einen Token, gehört **dieser** in ein GitHub Secret:
+
+```yaml
+# .github/workflows/monitor.yml, im env:-Block
+          HEALTHCHECK_TOKEN: ${{ secrets.HEALTHCHECK_TOKEN }}
+```
+
+```json
+{
+  "name": "Admin API",
+  "url": "https://admin.core-fit.app/health",
+  "component_id": "b3c4d5e6f7a8",
+  "headers": { "Authorization": "Bearer ${HEALTHCHECK_TOKEN}" },
+  "expected_body_contains": "\"status\":\"ok\""
+}
+```
+
+### Weitere Möglichkeiten
+
+| Ziel | Konfiguration |
+| --- | --- |
+| Monitor pausieren (z. B. Wartungsfenster) | `"enabled": false` |
+| Zweite Statuspage bedienen | `"page_id": "${STATUSPAGE_PAGE_ID_INTERNAL}"` pro Monitor |
+| Weniger empfindlich reagieren | `"failure_threshold": 5` |
+| Teilausfall statt Totalausfall melden | `"down_status": "partial_outage"` |
+| Bei wechselhaftem Verhalten gelb schalten | `"flapping_status": "degraded_performance"` |
+| Nur einen Monitor testen | Workflow-Input `only` = Monitor-Name |
+
+Die Monitore laufen nacheinander im selben Job; Requests an Statuspage werden auf
+ca. 1 Request/Sekunde gedrosselt, weil Atlassian den API-Zugriff in dieser
+Grössenordnung begrenzt. Bei sehr vielen Endpoints (Faustregel: > ~20) die
+Timeouts und Retry-Pausen senken oder mit `MONITOR_ONLY` auf zwei Workflows
+aufteilen, damit ein Lauf deutlich unter 5 Minuten bleibt.
 
 ---
 
@@ -304,6 +343,7 @@ Optional nur einen Monitor prüfen: Feld `only` = `CoreFit API`.
 **Lokal (ohne Secrets):**
 
 ```bash
+python3 monitor.py --list-components    # alle Page- und Component-IDs auflisten
 python3 monitor.py --validate           # Konfiguration prüfen
 python3 monitor.py --dry-run            # Checks ausführen, Statuspage nicht anfassen
 python3 selftest.py                     # Logik-Tests (kein Netzwerk nötig)

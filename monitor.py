@@ -333,7 +333,7 @@ class StatuspageClient:
             time.sleep(wait)
         self._last_call = time.monotonic()
 
-    def _request(self, method: str, path: str, payload: dict | None = None) -> dict:
+    def _request(self, method: str, path: str, payload: dict | None = None):
         url = f"{API_BASE}{path}"
         if not url.startswith("https://"):
             raise StatuspageError("refusing to talk to the Statuspage API over plain HTTP")
@@ -372,6 +372,12 @@ class StatuspageClient:
                 time.sleep(backoff)
 
         raise StatuspageError(last_error or "unknown error")
+
+    def list_pages(self) -> list:
+        return self._request("GET", "/pages") or []
+
+    def list_components(self, page_id: str) -> list:
+        return self._request("GET", f"/pages/{page_id}/components") or []
 
     def get_component(self, page_id: str, component_id: str) -> dict:
         return self._request("GET", f"/pages/{page_id}/components/{component_id}")
@@ -459,6 +465,29 @@ def run_monitor(monitor: dict, client: StatuspageClient | None, dry_run: bool) -
     }
 
 
+def list_components(client: StatuspageClient) -> int:
+    """Print every page and component id so new monitors can be configured."""
+    pages = client.list_pages()
+    if not pages:
+        log("no pages found for this API key")
+        return 1
+
+    for page in pages:
+        print(f"\npage_id      {page.get('id')}   {page.get('name', '')}")
+        components = client.list_components(page.get("id", ""))
+        if not components:
+            print("  (no components on this page yet)")
+            continue
+        for component in components:
+            kind = "group    " if component.get("group") else "component"
+            print(f"  {kind}  {component.get('id')}   {component.get('name', '')}"
+                  f"   [{component.get('status', '?')}]")
+
+    print("\nUse a component id in monitors.json:")
+    print('  { "name": "My API", "url": "https://...", "component_id": "<component id above>" }')
+    return 0
+
+
 def write_job_summary(rows: list[dict]) -> None:
     path = os.environ.get("GITHUB_STEP_SUMMARY")
     if not path:
@@ -501,9 +530,22 @@ def main(argv: list[str] | None = None) -> int:
                         help="run the health checks but never call the Statuspage API")
     parser.add_argument("--validate", action="store_true",
                         help="only validate the configuration file and exit")
+    parser.add_argument("--list-components", action="store_true",
+                        help="list all pages and component ids for the API key and exit")
     args = parser.parse_args(argv)
 
     collect_sensitive_values()
+
+    if args.list_components:
+        api_key = os.environ.get("STATUSPAGE_API_KEY", "").strip()
+        if not api_key:
+            log("STATUSPAGE_API_KEY is not set")
+            return 1
+        try:
+            return list_components(StatuspageClient(api_key))
+        except StatuspageError as exc:
+            log(f"statuspage error: {exc}")
+            return 1
 
     try:
         _, monitors = load_config(args.config)
